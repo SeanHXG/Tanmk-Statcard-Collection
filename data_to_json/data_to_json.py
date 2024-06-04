@@ -10,11 +10,92 @@ RAW_DATA_PATH = r'Tanmk Statcard Collection - Raw Data.csv'
 HULL_JSON_PATH = r'data_to_json/hull-data.json'
 TURRET_JSON_PATH = r'data_to_json/turret-data.json'
 GUN_JSON_PATH = r'data_to_json/gun-data.json'
+AMMO_FIELDS = {'Pen @ 0': 'pen0',
+               'Pen @ 30': 'pen30',
+               'Pen @ 60': 'pen60',
+               'Velocity': 'velocity',
+               'Ricochet Angle': 'ricochet_angle',
+               'Fuse Sens': 'fuse_sensitivity',
+               'Fuse Delay': 'fuse_delay',
+               'Expl. Mass': 'filler',
+               'Range': 'range',
+               'Fuse Radius': 'fuse_radius',
+               'Arming Distance': 'arming_distance',
+               'Modifiers': 'modifiers'}
+MODIFIERS = {'A-ERA': 'Anti-ERA',
+             'OTA': 'OTA',
+             'PF': 'PF',
+             'Tandem': 'Tandem',
+             'Tndm': 'Tandem'}
 
 
-def to_snake_case(string: str):
+def to_snake_case(string: str) -> str:
     """Takes a string with spaces and returns it in snake_case"""
     return re.sub(' +', '_', string).lower()
+
+
+def blueprint_helper(info: str) -> tuple:
+    """Takes a string of aqcuisition information and returns a tuple
+    containing a dictionary of materials if it is a blueprint, or None
+    otherwise, and the method of aquisition.
+    """
+    material_dict = None
+    if 'Blueprints' in info:
+        materials = info.split('\n')[1:]
+        # If the part is an unobtainable blueprint, remove this information
+        # from the list of materials
+        info = 'Blueprints'
+        while ':' not in materials[0]:
+            materials.pop(0)
+            info = 'Unobtainable'
+        # Populate our dictionary
+        material_dict = {}
+        for mat in materials:
+            material_dict[mat[:mat.find(':')]]\
+                = int(mat[mat.find(':') + 2:])
+    return material_dict, info
+
+
+def ammunition_helper(data: list, index: str) -> dict:
+    """docstring
+    """
+    # Initialize our returned dictionary
+    result = {}
+    # Iterate through the information of the part's ammunition
+    for ammo in [data[52][index], data[53][index], data[54][index],
+                 data[55][index]]:
+        # Stop looping if there is no ammunition info to read
+        if ammo == '':
+            break
+
+        # Initialize a temporary dictionary for each ammo
+        stat_list = {field: None for field in AMMO_FIELDS.values()}
+        # Split our ammo data into a list
+        ammo = ammo.split('\n')
+
+        # Split the first element into the shell type
+        # and its modifiers.
+        name = ammo[0].split(' ')
+        ammo_type = name[0]
+        # If there are modifiers, we append them to a list and set their
+        # key to 'modifiers'
+        if name[1]:
+            stat_list['modifiers'] = [MODIFIERS[mod] for mod in
+                                      name[1].strip('()').split('/')]
+
+        # Loop through every other field
+        for field in ammo[1:]:
+            # We remove all non-unicode degree symbols from field
+            field = re.sub('° *', '', field)
+            # Split each field into a tuple representing a key/value pair
+            field = field.split(':')
+            # Clean up the "value" string
+            field[1] = field[1].strip()
+            stat_list[AMMO_FIELDS[field[0]]] = field[1]
+
+        # Append the new (ammo_type, ammo_stats) pair to the result
+        result[ammo_type] = stat_list
+    return result
 
 
 def fill_fields(data: list, part_name: str, categories: list, type: str):
@@ -33,14 +114,11 @@ def fill_fields(data: list, part_name: str, categories: list, type: str):
     # Initialize our dictionary
     dictionary = {}
     # Modifier based on part type to ensure we use the correct information
-    part_type_mod = 0 if type == 'Hull' else 22 if type == 'Turret' else 43
+    part_type_mod = {'Hull': 0, 'Turret': 22, 'Gun': 43}[type]
     # Loop through each category and append them to the dictionary
     for (n, category) in enumerate(categories):
-        # Remove the trailing information in related part data
-        info = re.sub(r' *\[.*\]', '', data[n+part_type_mod][part_name])
-
-        # Remove the non-unicode 'degree' and horizontal/vertical arrow
-        # symbols
+        info = data[n+part_type_mod][part_name]
+        # Remove the non-unicode 'degree' and horizontal/vertical arrow symbols
         info = info.replace('°', '').replace('↔', '').replace('↕', '')
 
         match(category):
@@ -48,9 +126,17 @@ def fill_fields(data: list, part_name: str, categories: list, type: str):
             case 'crew':
                 info = info.split()
 
+            # If the info is ammunition for a gun, we create a dictionary
+            # of its ammunition types
+            case 'ammunition':
+                info = ammunition_helper(data, part_name)
+                # Increment our part type modifier to account for the 4
+                # consecutive ammunition rows
+                part_type_mod += 3
+                pass
+
             # Handle obtain-specific issues
             case 'obtain':
-
                 # Some parts require ownership of another part to purchase
                 # Check and add the "Requires" field to the dictionary
                 # If there is no required part, it will be assigned 'None'
@@ -58,27 +144,25 @@ def fill_fields(data: list, part_name: str, categories: list, type: str):
                     info[info.find('Requires'):].split('\n')[0] \
                     if 'Requires' in data[n + part_type_mod][part_name] \
                     else None
-
                 # Clean up info, removing certain unecessary phrases
                 info = re.sub(r'Requires .*\n', '',
                               info.replace('\n(Starter Item)', 'h'))
-
                 # If the part is a blueprint, we need to create a
                 # dictionary of its materials
-                dictionary['Materials'] = None
-                if 'Blueprints' in info:
-                    materials = info.split('\n')[1:]
-                    # If the part is an offsale or unobtainable blueprint,
-                    # remove this information from the list
-                    while ':' not in materials[0]:
-                        materials.pop(0)
-                        info = 'Unobtainable'
-                    # Populate our dictionary
-                    material_dict = {}
-                    for mat in materials:
-                        material_dict[mat[:mat.find(':')]]\
-                            = int(mat[mat.find(':') + 2:])
-                    dictionary['Materials'] = material_dict
+                dictionary['Materials'], info = blueprint_helper(info)
+
+            # Split the based on and paired parts into a list, 
+            # if there is at least one element
+            case 'based' | 'hulls' | 'turrets' | 'guns':
+                info = re.sub(r' \(\?\)', '', info)
+                if info != 'none':
+                    # Remove excess whitespace used in the csv
+                    info = re.sub(r' *\n? +', ' ', info)
+                    info = re.sub(r' *\n *\[', ' [', info)
+                    # Remove tier information for paired parts
+                    info = re.sub(r' *\[\d*\]', '', info)
+                    # Split into an array based on remaining newlines
+                    info = info.split('\n')
         # Add the (infoType, info) pair to the dictionary
         dictionary[category] = info
     return dictionary
@@ -99,7 +183,7 @@ with open(RAW_DATA_PATH, 'r', encoding="utf-8") as raw_data:
     gun_info = []
     # We need an accumulator to indicate when each part type is complete
     # The order is Hulls -> Turrets -> Guns
-    ACC = 0
+    acc = 0
     for row in data:
         # 'Hull' is the first element in the first column which contains
         # the category names
@@ -111,43 +195,59 @@ with open(RAW_DATA_PATH, 'r', encoding="utf-8") as raw_data:
             # Part type sections are seperated by a single blank row
             # so we increase the accumulator when we encounter one.
             case '':
-                ACC += 1
+                acc += 1
             # After each blank row, the next category name is simply the
             # type of part. We don't need this so we skip in these cases.
             case 'turret' | 'gun':
                 pass
             case _:
-                match(ACC):
+                match(acc):
                     case 0:
                         hull_info.append(category)
                     case 1:
                         turret_info.append(category)
-                    case 2:
+                    case _:
                         gun_info.append(category)
 
     # Handle Hulls #
     # Get names of every hull
-    hullNames = list(data[0])[1:]
-    for hull in hullNames:
+    hull_names = list(data[0])[1:]
+    for hull in hull_names:
         # Append a dictionary populated with the hull's information to hulls
         hulls[re.sub(r' *\(!\)', '', hull)] = \
             fill_fields(data, hull, hull_info, 'Hull')
 
-    # Write all hulls' information to hull_file in JSON format
+    # Write all hulls' information to HULL_JSON_PATH in JSON format
     with open(HULL_JSON_PATH, 'w',
               encoding="utf-8") as hull_file:
         json.dump(hulls, hull_file)
 
     # Handle Turrets #
     # Get names of every turret
-    turretNames = [name for name in data[21].values() if name][1:]
-    turretNames = zip(turretNames, hullNames)
-    for turret in turretNames:
+    turret_names = zip([name for name in data[21].values() if name][1:],
+                       hull_names)
+    # Every dictionary will have hull names as keys, so we have to use them to
+    # access data
+    for (turret, index) in turret_names:
         # Append a dictionary populated with the hull's information to hulls
-        turrets[re.sub(r' *\(!\)', '', turret[0])] = \
-            fill_fields(data, turret[1], turret_info, 'Turret')
+        turrets[re.sub(r' *\(!\)', '', turret)] = \
+            fill_fields(data, index, turret_info, 'Turret')
 
-    # Write all turrets' information to hull_file in JSON format
+    # Write all turrets' information to TURRET_JSON_PATH in JSON format
     with open(TURRET_JSON_PATH, 'w',
               encoding="utf-8") as turret_file:
         json.dump(turrets, turret_file)
+
+    # Handle Guns #
+    # Get names of every gun
+    gun_names = zip([name for name in data[42].values() if name][1:],
+                    hull_names)
+    for (gun, index) in gun_names:
+        # Append a dictionary populated with the hull's information to hulls
+        guns[re.sub(r' *\(!\)', '', gun)] = \
+            fill_fields(data, index, gun_info, 'Gun')
+
+    # Write all guns' information to GUN_JSON_PATH in JSON format
+    with open(GUN_JSON_PATH, 'w',
+              encoding="utf-8") as gun_file:
+        json.dump(guns, gun_file)
