@@ -57,7 +57,13 @@ def blueprint_helper(info: str) -> tuple:
 
 
 def ammunition_helper(data: list, index: str) -> dict:
-    """docstring
+    """Takes the 'index' of a gun and returns a dictionary containing
+    all the information of its shells from the data provided
+
+    Args:
+        data (list): The list of dictionaries representing raw_data
+        index (str): The name of the hull which is in the same column
+                     as the gun whose ammunition stats are to be recorded
     """
     # Initialize our returned dictionary
     result = {}
@@ -126,6 +132,12 @@ def fill_fields(data: list, part_name: str, categories: list, type: str):
             case 'crew':
                 info = info.split()
 
+            # Check if the ammunition has blowout protection
+            case 'ammo_storage':
+                info = info.split()
+                dictionary['blowout'] = info[1].strip('()')\
+                    if len(info) > 1 else None
+                info = 0.0 if info[0] == 'None' else float(info[0])
             # If the info is ammunition for a gun, we create a dictionary
             # of its ammunition types
             case 'ammunition':
@@ -151,7 +163,7 @@ def fill_fields(data: list, part_name: str, categories: list, type: str):
                 # dictionary of its materials
                 dictionary['Materials'], info = blueprint_helper(info)
 
-            # Split the based on and paired parts into a list, 
+            # Split the based on and paired parts into a list,
             # if there is at least one element
             case 'based' | 'hulls' | 'turrets' | 'guns':
                 info = re.sub(r' \(\?\)', '', info)
