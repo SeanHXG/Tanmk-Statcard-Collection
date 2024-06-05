@@ -7,9 +7,7 @@ import re
 import json
 
 RAW_DATA_PATH = r'Tanmk Statcard Collection - Raw Data.csv'
-HULL_JSON_PATH = r'data_to_json/hull-data.json'
-TURRET_JSON_PATH = r'data_to_json/turret-data.json'
-GUN_JSON_PATH = r'data_to_json/gun-data.json'
+OUTPUT_JSON_PATH = r'data_to_json/part-data.json'
 AMMO_FIELDS = {'Pen @ 0': 'pen0',
                'Pen @ 30': 'pen30',
                'Pen @ 60': 'pen60',
@@ -185,15 +183,13 @@ with open(RAW_DATA_PATH, 'r', encoding="utf-8") as raw_data:
     # Prepare raw data for reading
     data = list(csv.DictReader(raw_data))
 
-    # Initialize some lists
-    hulls = {}
-    turrets = {}
-    guns = {}
+    # Initialize our dictionary to be dumped to JSON
+    parts = {'hulls': {}, 'turrets': {}, 'guns': {}}
 
     # Prepare the stat categories for each part type #
-    hull_info = []
-    turret_info = []
-    gun_info = []
+    hull_fields = []
+    turret_fields = []
+    gun_fields = []
     # We need an accumulator to indicate when each part type is complete
     # The order is Hulls -> Turrets -> Guns
     ACC = 0
@@ -216,24 +212,19 @@ with open(RAW_DATA_PATH, 'r', encoding="utf-8") as raw_data:
             case _:
                 match(ACC):
                     case 0:
-                        hull_info.append(category)
+                        hull_fields.append(category)
                     case 1:
-                        turret_info.append(category)
+                        turret_fields.append(category)
                     case _:
-                        gun_info.append(category)
+                        gun_fields.append(category)
 
     # Handle Hulls #
     # Get names of every hull
     hull_names = list(data[0])[1:]
     for hull in hull_names:
         # Append a dictionary populated with the hull's information to hulls
-        hulls[re.sub(r' *\(!\)', '', hull)] = \
-            fill_fields(data, hull, hull_info, 'Hull')
-
-    # Write all hulls' information to HULL_JSON_PATH in JSON format
-    with open(HULL_JSON_PATH, 'w',
-              encoding="utf-8") as hull_file:
-        json.dump(hulls, hull_file)
+        parts['hulls'][re.sub(r' *\(!\)', '', hull)] = \
+            fill_fields(data, hull, hull_fields, 'Hull')
 
     # Handle Turrets #
     # Get names of every turret
@@ -242,15 +233,10 @@ with open(RAW_DATA_PATH, 'r', encoding="utf-8") as raw_data:
     # Every dictionary will have hull names as keys, so we have to use them to
     # access data
     for (turret, index) in turret_names:
-        # Append a dictionary populated with the turret's information to 
+        # Append a dictionary populated with the turret's information to
         # turrets
-        turrets[re.sub(r' *\(!\)', '', turret)] = \
-            fill_fields(data, index, turret_info, 'Turret')
-
-    # Write all turrets' information to TURRET_JSON_PATH in JSON format
-    with open(TURRET_JSON_PATH, 'w',
-              encoding="utf-8") as turret_file:
-        json.dump(turrets, turret_file)
+        parts['turrets'][re.sub(r' *\(!\)', '', turret)] = \
+            fill_fields(data, index, turret_fields, 'Turret')
 
     # Handle Guns #
     # Get names of every gun
@@ -260,10 +246,11 @@ with open(RAW_DATA_PATH, 'r', encoding="utf-8") as raw_data:
     # access data
     for (gun, index) in gun_names:
         # Append a dictionary populated with the gun's information to guns
-        guns[re.sub(r' *\(!\)', '', gun)] = \
-            fill_fields(data, index, gun_info, 'Gun')
+        parts['guns'][re.sub(r' *\(!\)', '', gun)] = \
+            fill_fields(data, index, gun_fields, 'Gun')
 
+    # Write our data to the file
     # Write all guns' information to GUN_JSON_PATH in JSON format
-    with open(GUN_JSON_PATH, 'w',
-              encoding="utf-8") as gun_file:
-        json.dump(guns, gun_file)
+    with open(OUTPUT_JSON_PATH, 'w',
+              encoding="utf-8") as output_file:
+        json.dump(parts, output_file)
