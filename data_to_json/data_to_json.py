@@ -56,7 +56,7 @@ def blueprint_helper(info: str) -> tuple:
     return material_dict, info
 
 
-def ammunition_helper(data: list, index: str) -> dict:
+def ammunition_helper(data_list: list, part_index: str) -> dict:
     """Takes the 'index' of a gun and returns a dictionary containing
     all the information of its shells from the data provided
 
@@ -65,11 +65,10 @@ def ammunition_helper(data: list, index: str) -> dict:
         index (str): The name of the hull which is in the same column
                      as the gun whose ammunition stats are to be recorded
     """
-    # Initialize our returned dictionary
+    # Initialize the returned dictionary
     result = {}
     # Iterate through the information of the part's ammunition
-    for ammo in [data[52][index], data[53][index], data[54][index],
-                 data[55][index]]:
+    for ammo in [data_list[n][part_index] for n in range(52, 56)]:
         # Stop looping if there is no ammunition info to read
         if ammo == '':
             break
@@ -104,7 +103,8 @@ def ammunition_helper(data: list, index: str) -> dict:
     return result
 
 
-def fill_fields(data: list, part_name: str, categories: list, type: str):
+def fill_fields(data_list: list, part_name: str, categories: list,
+                part_type: str):
     """A helper function which returns a dictionary with all fields of a
     part filled, based on the data provided.
 
@@ -120,14 +120,14 @@ def fill_fields(data: list, part_name: str, categories: list, type: str):
     # Initialize our dictionary
     dictionary = {}
     # Modifier based on part type to ensure we use the correct information
-    part_type_mod = {'Hull': 0, 'Turret': 22, 'Gun': 43}[type]
-    # Loop through each category and append them to the dictionary
-    for (n, category) in enumerate(categories):
-        info = data[n+part_type_mod][part_name]
+    part_type_mod = {'Hull': 0, 'Turret': 22, 'Gun': 43}[part_type]
+    # Loop through each field and append them to the dictionary
+    for (n, field) in enumerate(categories):
+        info = data_list[n+part_type_mod][part_name]
         # Remove the non-unicode 'degree' and horizontal/vertical arrow symbols
         info = info.replace('°', '').replace('↔', '').replace('↕', '')
 
-        match(category):
+        match(field):
             # If the info is crew data, split it into a list
             case 'crew':
                 info = info.split()
@@ -141,11 +141,10 @@ def fill_fields(data: list, part_name: str, categories: list, type: str):
             # If the info is ammunition for a gun, we create a dictionary
             # of its ammunition types
             case 'ammunition':
-                info = ammunition_helper(data, part_name)
+                info = ammunition_helper(data_list, part_name)
                 # Increment our part type modifier to account for the 4
                 # consecutive ammunition rows
                 part_type_mod += 3
-                pass
 
             # Handle obtain-specific issues
             case 'obtain':
@@ -162,10 +161,12 @@ def fill_fields(data: list, part_name: str, categories: list, type: str):
                 # If the part is a blueprint, we need to create a
                 # dictionary of its materials
                 dictionary['Materials'], info = blueprint_helper(info)
+                # If it is not a blueprint, assign None to the materials
 
             # Split the based on and paired parts into a list,
             # if there is at least one element
             case 'based' | 'hulls' | 'turrets' | 'guns':
+                # Remove the uncertain (?)s
                 info = re.sub(r' \(\?\)', '', info)
                 if info != 'none':
                     # Remove excess whitespace used in the csv
@@ -176,7 +177,7 @@ def fill_fields(data: list, part_name: str, categories: list, type: str):
                     # Split into an array based on remaining newlines
                     info = info.split('\n')
         # Add the (infoType, info) pair to the dictionary
-        dictionary[category] = info
+        dictionary[field] = info
     return dictionary
 
 
