@@ -61,9 +61,9 @@ def ammunition_helper(data_list: list, part_index: str) -> dict:
     all the information of its shells from the data provided
 
     Args:
-        data (list): The list of dictionaries representing raw_data
-        index (str): The name of the hull which is in the same column
-                     as the gun whose ammunition stats are to be recorded
+        data_list (list): The list of dictionaries representing raw_data
+        part_index (str): The name of the hull which is in the same column
+                          as the gun whose ammunition stats are to be recorded
     """
     # Initialize the returned dictionary
     result = {}
@@ -109,10 +109,10 @@ def fill_fields(data_list: list, part_name: str, categories: list,
     part filled, based on the data provided.
 
     Args:
-        data (list): The list of dictionaries representing the raw data
+        dat_alist (list): The list of dictionaries representing the raw data
         part_name (str): The name of the part to have its data filled
         categories (list): The list of fields to be filled
-        type (str): The type of part that part_name is
+        part_type (str): The type of part that part_name is
 
     Returns:
         dictionary (dict): The populated dictionary for part_name
@@ -196,25 +196,25 @@ with open(RAW_DATA_PATH, 'r', encoding="utf-8") as raw_data:
     gun_info = []
     # We need an accumulator to indicate when each part type is complete
     # The order is Hulls -> Turrets -> Guns
-    acc = 0
+    ACC = 0
     for row in data:
         # 'Hull' is the first element in the first column which contains
         # the category names
         # We clean them up to remove non-unicode characters and convert them
         # to snake_case
-        category = row['Hull'].replace('↔ ', 'h').replace('↕ ', 'v')
+        category = row['Hull'].replace('↔', 'h').replace('↕', 'v')
         category = to_snake_case(category)
         match(category):
             # Part type sections are seperated by a single blank row
             # so we increase the accumulator when we encounter one.
             case '':
-                acc += 1
+                ACC += 1
             # After each blank row, the next category name is simply the
             # type of part. We don't need this so we skip in these cases.
             case 'turret' | 'gun':
                 pass
             case _:
-                match(acc):
+                match(ACC):
                     case 0:
                         hull_info.append(category)
                     case 1:
@@ -242,7 +242,8 @@ with open(RAW_DATA_PATH, 'r', encoding="utf-8") as raw_data:
     # Every dictionary will have hull names as keys, so we have to use them to
     # access data
     for (turret, index) in turret_names:
-        # Append a dictionary populated with the hull's information to hulls
+        # Append a dictionary populated with the turret's information to 
+        # turrets
         turrets[re.sub(r' *\(!\)', '', turret)] = \
             fill_fields(data, index, turret_info, 'Turret')
 
@@ -255,8 +256,10 @@ with open(RAW_DATA_PATH, 'r', encoding="utf-8") as raw_data:
     # Get names of every gun
     gun_names = zip([name for name in data[42].values() if name][1:],
                     hull_names)
+    # Every dictionary will have hull names as keys, so we have to use them to
+    # access data
     for (gun, index) in gun_names:
-        # Append a dictionary populated with the hull's information to hulls
+        # Append a dictionary populated with the gun's information to guns
         guns[re.sub(r' *\(!\)', '', gun)] = \
             fill_fields(data, index, gun_info, 'Gun')
 
