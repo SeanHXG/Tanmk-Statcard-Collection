@@ -34,15 +34,18 @@ def to_snake_case(string: str) -> str:
 
 def blueprint_helper(info: str) -> tuple:
     """Takes a string of aqcuisition information and returns a tuple
-    containing a dictionary of materials if it is a blueprint, or None
+    containing a dictionary of materials if it is a blueprint or None
     otherwise, and the method of aquisition.
     """
     material_dict = None
     if 'Blueprints' in info:
         materials = info.split('\n')[1:]
-        # If the part is an unobtainable blueprint, remove this information
-        # from the list of materials
+        # If the part is an unobtainable blueprint, remove the first line
+        # from the list of materials, as it is only "Blueprints"
         info = 'Blueprints'
+        # If the next line does not contain a colon, it is text about the
+        # availability of the part, which is always unobtainable.
+        # We remove this text until our list contains only material data.
         while ':' not in materials[0]:
             materials.pop(0)
             info = 'Unobtainable'
@@ -107,7 +110,7 @@ def fill_fields(data_list: list, part_name: str, categories: list,
     part filled, based on the data provided.
 
     Args:
-        dat_alist (list): The list of dictionaries representing the raw data
+        data_list (list): The list of dictionaries representing the raw data
         part_name (str): The name of the part to have its data filled
         categories (list): The list of fields to be filled
         part_type (str): The type of part that part_name is
@@ -125,17 +128,29 @@ def fill_fields(data_list: list, part_name: str, categories: list,
         # Remove the non-unicode 'degree' and horizontal/vertical arrow symbols
         info = info.replace('°', '').replace('↔', '').replace('↕', '')
 
+        # Handle problematic fields or those that provide extra information
         match(field):
-            # If the info is crew data, split it into a list
-            case 'crew':
-                info = info.split()
+            case 'traverse_rate':
+                if part_type == 'Hull':
+                    dictionary['wheeled'] = ('m' in info)
 
-            # Check if the ammunition has blowout protection
+            # Check if the hull is turretless
+            case 'reload_multi':
+                if part_type == 'Hull':
+                    dictionary['turretless'] = (info != 'N/A')
+
+            # Check if the ammunition has blowout protection or a clip
             case 'ammo_storage':
+                dictionary['blowout'] = 'None'
+                dictionary['clip'] = 'No'
                 info = info.split()
-                dictionary['blowout'] = info[1].strip('()')\
-                    if len(info) > 1 else None
+                if len(info) > 1:
+                    if 'Ready' in info[1]:
+                        dictionary['clip'] = 'Yes'
+                    else:
+                        dictionary['blowout'] = info[1].strip('()')
                 info = 0.0 if info[0] == 'None' else float(info[0])
+
             # If the info is ammunition for a gun, we create a dictionary
             # of its ammunition types
             case 'ammunition':
@@ -143,6 +158,10 @@ def fill_fields(data_list: list, part_name: str, categories: list,
                 # Increment our part type modifier to account for the 4
                 # consecutive ammunition rows
                 part_type_mod += 3
+
+            # If the info is crew data, split it into a list
+            case 'crew':
+                info = info.split()
 
             # Handle obtain-specific issues
             case 'obtain':
@@ -174,6 +193,7 @@ def fill_fields(data_list: list, part_name: str, categories: list,
                     info = re.sub(r' *\[\d*\]', '', info)
                     # Split into an array based on remaining newlines
                     info = info.split('\n')
+
         # Add the (infoType, info) pair to the dictionary
         dictionary[field] = info
     return dictionary
