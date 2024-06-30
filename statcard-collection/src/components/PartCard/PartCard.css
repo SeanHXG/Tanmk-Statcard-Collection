@@ -1,0 +1,59 @@
+.statcard-wrapper{
+    width: 15rem; 
+    height: 16rem; 
+    cursor:pointer; 
+    box-shadow: rgba(0, 0, 0, 0.35) 0px 5px 15px;
+    margin-left: 10px;
+    margin-right: 10px;
+}
+
+.statcard-img-tag-wrapper{
+    height:10rem;
+    position: relative;
+    padding-bottom: 0px;
+    background-color: #027373;
+}
+
+.statcard-img{
+    height:10rem;
+    object-fit: cover; 
+    position: relative;
+}
+
+.tags-wrapper{
+    position: absolute; 
+    bottom: 0; 
+    display: flex; 
+    width: 100%; 
+    align-items: flex-end;
+    overflow-x: scroll;
+}
+.tags-wrapper::-webkit-scrollbar{
+    display: none;
+}
+
+.tag{
+    background-color: white; 
+    color: black; 
+    display: flex; 
+    font-weight: 650; 
+    font-size: 0.70rem; 
+    margin-right: 2px; 
+    box-shadow: rgba(0, 0, 0, 0.4) 0px 2px 4px, rgba(0, 0, 0, 0.3) 0px 7px 13px -3px, rgba(0, 0, 0, 0.2) 0px -2px 0px inset;
+}
+
+.card-title{
+    font-size:'larger';
+    margin-bottom: 0px;
+    line-height:normal;
+}
+
+.text-no-overflow{
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.cutoff{
+    text-overflow:clip; 
+}

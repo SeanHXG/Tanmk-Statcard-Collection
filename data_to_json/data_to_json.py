@@ -7,7 +7,19 @@ import re
 import json
 
 RAW_DATA_PATH = r'Tanmk Statcard Collection - Raw Data.csv'
-OUTPUT_JSON_PATH = r'data_to_json/part-data.json'
+OUTPUT_JSON_PATH = r'statcard-collection/src/part-data.json'
+PRICE_DICT = {'1': 1000,
+              '2': 3000,
+              '3': 9000,
+              '4': 27000,
+              '5': 81000,
+              '6': 243000,
+              '7': 510400,
+              '8': 1530900,
+              '9': 3045000,
+              '10': 8687000,
+              '11': 16376000,
+              '12': 22824000, }
 AMMO_FIELDS = {'Pen @ 0': 'pen0',
                'Pen @ 30': 'pen30',
                'Pen @ 60': 'pen60',
@@ -46,9 +58,10 @@ def blueprint_helper(info: str) -> tuple:
         # If the next line does not contain a colon, it is text about the
         # availability of the part, which is always unobtainable.
         # We remove this text until our list contains only material data.
+        if 'Unobtainable' in materials[0]:
+            info = 'Unobtainable'
         while ':' not in materials[0]:
             materials.pop(0)
-            info = 'Unobtainable'
         # Populate our dictionary
         material_dict = {}
         for mat in materials:
@@ -130,14 +143,56 @@ def fill_fields(data_list: list, part_name: str, categories: list,
 
         # Handle problematic fields or those that provide extra information
         match(field):
+            # Split up the armor sections.
+            case 'armor':
+                info = info.split('/')
+                if len(info) == 1:
+                    info = [None, None, None]
+                dictionary['armor_front'] = info[0]
+                dictionary['armor_side'] = info[1]
+                info = info[2]
+                field = 'armor_rear'
+
+            # Check if the hull is wheeled
             case 'traverse_rate':
-                if part_type == 'Hull':
-                    dictionary['wheeled'] = ('m' in info)
+                # AMX-10RC is a special case where it steers like a tank so it
+                # does not have a turning radius
+                # Otherwise, all wheeled hulls have a turning radius in meters
+                dictionary['wheeled'] = 'No'
+                dictionary['turning_radius'] = 'N/A'
+                if 'm' in info or part_name == 'AMX-10RC':
+                    dictionary['wheeled'] = 'Yes'
+                    dictionary['turning_radius'] = info
+                    info = 'N/A'
 
             # Check if the hull is turretless
             case 'reload_multi':
                 if part_type == 'Hull':
-                    dictionary['turretless'] = (info != 'N/A')
+                    dictionary['turretless'] = 'Yes' if info != 'N/A' else 'No'
+
+            # Separate the max forward and backward speeds
+            case 'max_speed':
+                dictionary['max_forwards'] = info.split('/')[0]
+                field = 'max_backwards'
+                info = info.split('/')[1]
+
+            # Separate the horizontal and vertical traverse speeds
+            case 'h/v_speeds':
+                dictionary['h_speed'] = info.split('/')[0].strip()
+                field = 'v_speed'
+                info = info.split('/')[1].strip()
+
+            # Separate the elevation and depression angles
+            case 'v_limits':
+                dictionary['depression'] = info.split('/')[0]
+                field = 'elevation'
+                info = info.split('/')[1]
+
+            # Separate the zoom limits
+            case 'zoom':
+                dictionary['min_zoom'] = info.split('-')[0]
+                field = 'max_zoom'
+                info = info.split('-')[1]
 
             # Check if the ammunition has blowout protection or a clip
             case 'ammo_storage':
@@ -168,17 +223,29 @@ def fill_fields(data_list: list, part_name: str, categories: list,
                 # Some parts require ownership of another part to purchase
                 # Check and add the "Requires" field to the dictionary
                 # If there is no required part, it will be assigned 'None'
-                dictionary['Requires'] = \
+                dictionary['requires'] = \
                     info[info.find('Requires'):].split('\n')[0] \
                     if 'Requires' in data[n + part_type_mod][part_name] \
                     else None
-                # Clean up info, removing certain unecessary phrases
-                info = re.sub(r'Requires .*\n', '',
-                              info.replace('\n(Starter Item)', 'h'))
                 # If the part is a blueprint, we need to create a
                 # dictionary of its materials
-                dictionary['Materials'], info = blueprint_helper(info)
-                # If it is not a blueprint, assign None to the materials
+                dictionary['materials'], info = blueprint_helper(info)
+                # Set the 'price' field of the part
+                dictionary['price'] = 'N/A'
+                if "Blueprints" in info or "Joe's Shack" in info:
+                    # We assume the tier has been set at this point
+                    dictionary['price'] = PRICE_DICT[dictionary['tier']]
+                elif '\u2b50' in info:
+                    # Handle if the part is in the daily shop (monthly reward)
+                    price_index = re.search(r'\n.*\u2b50', info).span()[0]
+                    price = info[price_index+1:]
+                    dictionary['price'] = price
+                    month = info.split(',')[1]
+                    month = info.split('\n')[0]
+                    info = f'Daily Shop ({month.strip()})'
+                # Clean up info, removing certain unecessary phrases
+                info = re.sub(r'Requires .*\n', '', info)
+                info = re.sub(r'\n.*', '', info)
 
             # Split the based on and paired parts into a list,
             # if there is at least one element
@@ -269,8 +336,7 @@ with open(RAW_DATA_PATH, 'r', encoding="utf-8") as raw_data:
         parts['guns'][re.sub(r' *\(!\)', '', gun)] = \
             fill_fields(data, index, gun_fields, 'Gun')
 
-    # Write our data to the file
-    # Write all guns' information to GUN_JSON_PATH in JSON format
+    # Write our data to OUTPUT_JSON_PATH in JSON format
     with open(OUTPUT_JSON_PATH, 'w',
               encoding="utf-8") as output_file:
         json.dump(parts, output_file)
